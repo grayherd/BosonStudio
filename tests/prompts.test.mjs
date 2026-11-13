@@ -59,7 +59,7 @@ test('the exact compiled prompt is sent to the H3 node and remains separate from
  const validated=validateGeneration({mode:'reference_to_image',prompt:'Make his shirt green.',asset_ids:['first'],aspect_ratio:'source',h3:{description:'Change the shirt in <Picture 1> to green; preserve the other details.'}},images);
  const models={videoModel:'base',referenceModel:'reference',textEncoder:'text',videoVae:'video',audioVae:'audio'};
  const {graph,prompts,metadata}=buildWorkflow(validated,models,new Map([['first','first.png']]));
- const node=Object.values(graph).find(node=>node.class_type==='MiniMaxH3ReferenceToVideo');
+ const node=Object.values(graph).find(node=>node.class_type==='MiniMaxH3ImageConditioning');
  assert.equal(node.inputs.prompt,prompts.finalPrompt);assert.equal(prompts.simplePrompt,'Make his shirt green.');
  assert.notEqual(prompts.simplePrompt,prompts.finalPrompt);assert.equal(metadata.promptFormat,'Ref2VA image');
 });

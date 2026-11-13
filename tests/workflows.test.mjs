@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validateGeneration, buildWorkflow, validateWorkflowInputs, MODES } from '../lib/workflows.mjs';
 import { endpoint } from '../lib/connections.mjs';
 
-const models = { videoModel: 'h3-fl2va.safetensors', referenceModel: 'h3-ref2va.safetensors', textEncoder: 'h3-qwen.safetensors', videoVae: 'h3-video.safetensors', audioVae: 'h3-audio.safetensors' };
+const models = { videoModel: 'h3-fl2va.safetensors', referenceModel: 'h3-ref2va.safetensors', textEncoder: 'h3-qwen.safetensors', videoVae: 'h3-video.safetensors', audioVae: 'h3-audio.safetensors', imageModel: 'h3-image.safetensors', imageTextEncoder: 'h3-image-qwen.safetensors', imageVae: 'h3-image-vae.safetensors' };
 const assets = [{ id: 'image-one', kind: 'image' }, { id: 'image-two', kind: 'image' }, { id: 'video-one', kind: 'video' }, { id: 'audio-one', kind: 'audio' }];
 const input = (mode, ids = []) => ({ mode, prompt: 'A cinematic garden in the early morning.', asset_ids: ids, duration: 5, aspect_ratio: 'portrait', seed: 123 });
 
@@ -12,15 +12,16 @@ test('all five generation paths create closed graphs with valid H3 frame grids',
     const ids = mode.startsWith('reference_') ? ['image-one', 'video-one', 'audio-one'] : mode === 'image_to_video' ? ['image-one', 'image-two'] : [];
     const spec = validateGeneration(input(mode, ids), assets);
     const { graph, metadata } = buildWorkflow(spec, models, new Map(ids.map(id => [id, `${id}.png`])));
-    assert.equal(metadata.width, 768); assert.equal(metadata.height, 1344);
-    assert.equal(metadata.frames % 17, 5); assert.equal(metadata.seed, 123);
+    if (mode.endsWith('_image')) { assert.equal(metadata.width, 3072); assert.equal(metadata.height, 5472); assert.equal(metadata.frames, 1); }
+    else { assert.equal(metadata.width, 768); assert.equal(metadata.height, 1344); assert.equal(metadata.frames % 17, 5); }
+    assert.equal(metadata.seed, 123);
     for (const node of Object.values(graph)) for (const value of Object.values(node.inputs)) {
       if (Array.isArray(value)) assert.ok(graph[value[0]], `Unresolved node link ${value[0]}`);
     }
     const nodes = Object.values(graph);
     assert.equal(nodes.filter(node => node.class_type === (mode.endsWith('_image') ? 'SaveImage' : 'SaveVideo')).length, 1);
     const loader = nodes.find(node => node.class_type === 'UNETLoader');
-    assert.equal(loader.inputs.unet_name, mode.startsWith('reference_') ? models.referenceModel : models.videoModel);
+    assert.equal(loader.inputs.unet_name, (mode === 'text_to_image' || mode === 'reference_to_image') ? models.imageModel : mode.startsWith('reference_') ? models.referenceModel : models.videoModel);
     if (mode === 'image_to_video') {
       const condition = nodes.find(node => node.class_type === 'MiniMaxH3ImageToVideo');
       assert.ok(condition.inputs.first_frame); assert.ok(condition.inputs.last_frame);
@@ -67,7 +68,8 @@ test('automatic seed generation works when an LLM omits the optional seed', () =
     assert.ok(Number.isSafeInteger(spec.seed));
     assert.ok(spec.seed >= 0 && spec.seed < 2 ** 48);
     const { graph } = buildWorkflow(spec, models, new Map());
-    assert.equal(Object.values(graph).find(node => node.class_type === 'RandomNoise').inputs.noise_seed, spec.seed);
+    const seeded = Object.values(graph).find(node => node.class_type === 'RandomNoise') || Object.values(graph).find(node => node.class_type === 'KSampler');
+    assert.equal(seeded.inputs.noise_seed ?? seeded.inputs.seed, spec.seed);
   }
   assert.equal(validateGeneration({ ...request, seed: 0 }, assets).seed, 0);
 });

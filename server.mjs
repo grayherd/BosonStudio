@@ -46,8 +46,11 @@ export async function createStudio({ directory = process.env.BOSON_DATA_DIR || p
   const assetPath = asset => path.join(directory, 'media', `${asset.id}${asset.extension}`);
   const publicAsset = asset => ({ ...asset, url: `/media/${asset.id}` });
   const state = () => ({ ...store.publicState(), assets: store.data.assets.filter(asset => !asset.deletedAt).map(publicAsset) });
-  for (const asset of store.data.assets.filter(asset => asset.kind === 'image' && !asset.deletedAt && !asset.metadata?.width)) {
-    try { asset.metadata = { ...asset.metadata, ...imageDimensions(await readFile(assetPath(asset))) }; } catch {}
+  for (const asset of store.data.assets.filter(asset => asset.kind === 'image' && !asset.deletedAt)) {
+    try {
+      const measured = imageDimensions(await readFile(assetPath(asset)));
+      if (measured?.width && (asset.metadata?.width !== measured.width || asset.metadata?.height !== measured.height)) asset.metadata = { ...asset.metadata, ...measured };
+    } catch {}
   }
   const safeError = error => {
     let message = error.message || 'Something went wrong.';
@@ -150,6 +153,13 @@ export async function createStudio({ directory = process.env.BOSON_DATA_DIR || p
           job.metadata = { ...job.metadata, ...measured, frames: measured.frames || Math.round(measured.duration * measured.fps) };
           asset.metadata = job.metadata;
         } finally { await unlink(downloadFile).catch(() => {}); }
+      }
+      else if (asset.kind === 'image') {
+        // The H3 image node clamps sizes to its 2048 template; trust the bytes actually on disk.
+        try {
+          const measured = imageDimensions(await readFile(downloadFile));
+          if (measured?.width && measured?.height) { job.metadata = { ...job.metadata, ...measured }; asset.metadata = job.metadata; }
+        } catch {}
       }
       if (job.deletedAt || job.status === 'cancelled') return;
       store.data.assets.push(asset); created.push(asset.id);
@@ -258,9 +268,11 @@ export async function createStudio({ directory = process.env.BOSON_DATA_DIR || p
         if (typeof input.message !== 'string' || !input.message.trim() || input.message.length > 16000) throw new Error('Enter a message of up to 16,000 characters.');
         const assetIds = input.assetIds || [];
         if (!Array.isArray(assetIds) || assetIds.length > 10 || assetIds.some(id => !store.data.assets.find(a => a.id === id && !a.deletedAt))) throw new Error('An attached asset is unavailable.');
+        const turbo = input.turbo === 4 || input.turbo === 8 ? input.turbo : 0;
+        store.data.config.models.turboSteps = turbo;
         store.message('user', input.message.trim(), { assetIds }); store.data.busy = true; await store.save();
         chatAbort = new AbortController();
-        void runAssistant(store, createJob, chatAbort.signal).catch(error => {
+        void runAssistant(store, createJob, chatAbort.signal, { turbo }).catch(error => {
           store.message('assistant', error.name === 'AbortError' ? 'Response stopped.' : safeError(error), { error: true });
         }).finally(async () => { store.data.busy = false; await store.save(); });
         return json(res, { accepted: true }, 202);

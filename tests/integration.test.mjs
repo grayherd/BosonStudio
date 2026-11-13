@@ -15,7 +15,7 @@ const waitUntil = async condition => { for (let i = 0; i < 120; i++) { if (await
 test('standalone chat, authenticated tool execution, gallery retrieval, byte ranges and persistence', async t => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'boson-test-'));
   let graph; let promptId; let toolCalls = 0; let gotBearer = 0;
-  const nodeNames = ['UNETLoader', 'CLIPLoader', 'VAELoader', 'MiniMaxH3ImageToVideo', 'MiniMaxH3SigmaShift', 'BasicGuider', 'RandomNoise', 'BasicScheduler', 'KSamplerSelect', 'SamplerCustomAdvanced', 'VAEDecode', 'VAEDecodeAudio', 'SaveImage', 'CreateVideo', 'SaveVideo', 'ImageFromBatch', 'MiniMaxH3ReferenceToVideo', 'LoadImage','LoadVideo','GetVideoComponents','LoadAudio','MiniMaxH3AddGuide','SaveAudio'];
+  const nodeNames = ['UNETLoader', 'LoraLoaderModelOnly', 'MiniMaxH3ImageConditioning', 'ConditioningZeroOut', 'KSampler', 'CLIPLoader', 'VAELoader', 'MiniMaxH3ImageToVideo', 'MiniMaxH3SigmaShift', 'BasicGuider', 'RandomNoise', 'BasicScheduler', 'KSamplerSelect', 'SamplerCustomAdvanced', 'VAEDecode', 'VAEDecodeAudio', 'SaveImage', 'CreateVideo', 'SaveVideo', 'ImageFromBatch', 'MiniMaxH3ReferenceToVideo', 'LoadImage','LoadVideo','GetVideoComponents','LoadAudio','MiniMaxH3AddGuide','SaveAudio'];
   const info = Object.fromEntries(nodeNames.map(name => [name, {}]));
   info.UNETLoader = { input: { required: { unet_name: [['minimax_h3_fl2va.safetensors', 'minimax_h3_ref2va.safetensors']], weight_dtype: [['default']] } } };
   info.CLIPLoader = { input: { required: { clip_name: [['minimax_h3_qwen.safetensors']], type: [['minimax']] }, optional: { device: [['default', 'cpu']] } } };

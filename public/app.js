@@ -106,11 +106,13 @@ function renderConnection() {
   $('#connection').classList.toggle('configured', configured && !disconnected);
   $('#connection-label').textContent = disconnected ? 'Reconnecting…' : configured ? 'Connections set' : 'Set up your studio';
 }
+let turboRestored = false;
 async function sync() {
   try {
     studio = await api('/api/state'); disconnected = false;
     attachments = attachments.filter(id => studio.assets.some(asset => asset.id === id));
     renderMessages(); renderGallery(); renderConnection(); renderAttachments();
+    if (!turboRestored && studio.config?.models) { const steps = String(studio.config.models.turboSteps || 0); const radio = document.querySelector(String.raw`input[name="turboSteps"][value="${steps}"]`); if (radio) radio.checked = true; turboRestored = true; }
   } catch { disconnected = true; renderConnection(); }
 }
 function setView(view) {
@@ -186,7 +188,8 @@ $('#composer').addEventListener('submit', async event => {
   if (!studio.config?.llm.model) { openSettings(); toast('Connect a language model to start creating.'); return; }
   $('#send').disabled = true;
   try {
-    await api('/api/chat', jsonOptions({ message, assetIds: attachments }));
+    const turboChecked = document.querySelector('input[name="turboSteps"]:checked');
+    await api('/api/chat', jsonOptions({ message, assetIds: attachments, turbo: Number(turboChecked?.value || 0) }));
     input.value = ''; input.style.height = ''; attachments = []; renderAttachments(); await sync();
     $('#chat-scroll').scrollTop = $('#chat-scroll').scrollHeight;
   } catch (error) { toast(error.message); }
@@ -217,7 +220,7 @@ function openSettings() {
   form.elements.llmModel.value = config.llm.model;
   form.elements.llmKey.value = ''; form.elements.clearLlmKey.checked = false;
   form.elements.llmKey.placeholder = config.llm.hasKey ? 'Saved key • leave blank to keep' : 'Optional API key';
-  for (const [key, value] of Object.entries(config.models)) form.elements[key].value = value;
+  for (const [key, value] of Object.entries(config.models)) if (form.elements[key]) form.elements[key].value = value;
   $('#settings-error').hidden = true;
   $('#settings-dialog').showModal();
 }
@@ -230,7 +233,7 @@ function formSettings() {
   const settings = { comfy: { url: form.comfyUrl.value.trim() }, llm: { url: form.llmUrl.value.trim(), model: form.llmModel.value.trim() }, models: {} };
   if (form.comfyToken.value || form.clearComfyToken.checked) settings.comfy.token = form.clearComfyToken.checked ? '' : form.comfyToken.value;
   if (form.llmKey.value || form.clearLlmKey.checked) settings.llm.key = form.clearLlmKey.checked ? '' : form.llmKey.value;
-  for (const key of ['videoModel', 'referenceModel', 'textEncoder', 'videoVae', 'audioVae']) settings.models[key] = form[key].value.trim();
+  for (const key of ['videoModel', 'referenceModel', 'textEncoder', 'videoVae', 'audioVae', 'turboFl4', 'turboRef4', 'turboFl8', 'turboRef8', 'imageModel', 'imageTextEncoder', 'imageVae']) settings.models[key] = form[key].value.trim();
   return settings;
 }
 async function saveSettings() {
@@ -256,7 +259,7 @@ $('#test-comfy').addEventListener('click', async () => {
   try {
     await saveSettings();
     const report = await api('/api/test/comfy', jsonOptions());
-    listOptions('#diffusion-models', report.models.diffusion); listOptions('#text-models', report.models.textEncoder); listOptions('#vae-models', report.models.vae);
+    listOptions('#diffusion-models', report.models.diffusion); listOptions('#text-models', report.models.textEncoder); listOptions('#vae-models', report.models.vae); listOptions('#lora-models', report.models.lora);
     const form = $('#settings-form').elements;
     for (const [key, value] of Object.entries(report.suggested)) if (!form[key].value && value) form[key].value = value;
     await saveSettings();
